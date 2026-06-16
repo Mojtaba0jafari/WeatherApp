@@ -15,13 +15,18 @@ public class WeatherController : ControllerBase
         _service = service;
     }
 
-    /// <summary>Get a mock forecast for a city.</summary>
+    /// <summary>Get a live forecast for a city.</summary>
     [HttpGet("{city}")]
-    public ActionResult<WeatherForecast> Get(string city)
+    public async Task<ActionResult<WeatherForecast>> Get(string city)
     {
         if (string.IsNullOrWhiteSpace(city))
             return BadRequest("City name is required.");
 
-        return Ok(_service.GetForecast(city));
+        var forecast = await _service.GetForecastAsync(city);
+
+        if (forecast == null)
+            return NotFound($"City '{city}' not found or API error.");
+
+        return Ok(forecast);
     }
 }
