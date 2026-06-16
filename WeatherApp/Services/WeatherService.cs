@@ -1,34 +1,45 @@
-﻿using WeatherApp.Models;
+﻿using System.Text.Json;
+using WeatherApp.Models;
 
 namespace WeatherApi.Services
 {
     public class WeatherService
     {
-        private readonly string[] _summaries = new[]
-        {
-            "Freezing", "Cool", "Mild", "Warm", "Hot"
-        };
+        private readonly HttpClient _httpClient;
+        private readonly string _apiKey;
+        private readonly string _baseUrl;
 
-        public WeatherForecast GetForecast(string city)
+        public WeatherService(HttpClient httpClient, IConfiguration configuration)
         {
-            var random = new Random();
-            int temperatureC = random.Next(-10, 40);
+            _httpClient = httpClient;
+            _apiKey = configuration["WeatherApi:ApiKey"]
+                ?? throw new InvalidOperationException("WeatherApi:ApiKey is not configured.");
+            _baseUrl = configuration["WeatherApi:BaseUrl"]
+                ?? throw new InvalidOperationException("WeatherApi:BaseUrl is not configured.");
+        }
 
-            int index = temperatureC switch
-            {
-                < 0 => 0,  // Freezing
-                < 10 => 1,  // Cool
-                < 20 => 2,  // Mild
-                < 30 => 3,  // Warm
-                _ => 4   // Hot
-            };
+        public async Task<WeatherForecast?> GetForecastAsync(string city)
+        {
+            var url = $"{_baseUrl}?q={Uri.EscapeDataString(city)}&appid={_apiKey}&units=metric";
+
+            var response = await _httpClient.GetAsync(url);
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            var temperatureC = root.GetProperty("main").GetProperty("temp").GetDouble();
+            var summary = root.GetProperty("weather")[0].GetProperty("description").GetString();
+            var name = root.GetProperty("name").GetString();
 
             return new WeatherForecast
             {
-                City = city,
+                City = name ?? city,
                 Date = DateTime.Now,
-                TemperatureC = temperatureC,
-                Summary = _summaries[index]
+                TemperatureC = (int)Math.Round(temperatureC),
+                Summary = summary ?? string.Empty
             };
         }
     }
